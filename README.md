@@ -20,7 +20,7 @@
 
 ### 界面预览
 
-![screenshot](https://via.placeholder.com/800x500/1e293b/e2e8f0?text=VPN+Monitor+Dashboard)
+![screenshot](https://gd-hbimg-edge.huaban.com/12f3c72b5c8c9daf7e6e74085150ead01eedbc7b77d9a-H4mcpl?auth_key=1782547200-10fa310f7ba9450e8039375f9deb635f-0-609d2b5efca49c7bf78c3353bd34a891)
 
 ---
 
