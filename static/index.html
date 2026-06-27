@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPN Server Monitor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>tailwind.config={darkMode:'class',theme:{extend:{colors:{dark:{bg:'#0f172a',card:'#1e293b',border:'#334155',text:'#e2e8f0',muted:'#94a3b8'}}}}}</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:'Inter','Segoe UI',system-ui,sans-serif;min-height:100vh}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:1.25rem;transition:all 0.2s}
+.card:hover{border-color:#475569}
+.stat-label{font-size:0.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}
+.stat-value{font-size:1.8rem;font-weight:700;line-height:1.1}
+.stat-unit{font-size:0.7rem;color:#64748b;margin-left:2px}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-running{background:#22c55e;box-shadow:0 0 6px #22c55e88;animation:pulse 2s infinite}
+.status-stopped{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+.progress-bar{height:6px;border-radius:3px;background:#334155;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;transition:width 0.5s ease}
+.tab-btn{padding:5px 14px;border-radius:6px;font-size:0.72rem;cursor:pointer;border:1px solid #334155;background:transparent;color:#94a3b8;transition:all 0.2s}
+.tab-btn.active{background:#3b82f6;color:#fff;border-color:#3b82f6}
+.tab-btn:hover:not(.active){border-color:#64748b;color:#e2e8f0}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:8px 12px;font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #334155;font-weight:600}
+td{padding:10px 12px;font-size:0.78rem;border-bottom:1px solid #1e293b;white-space:nowrap}
+tr:hover td{background:#1e293b44}
+.badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:0.65rem;font-weight:600;text-transform:uppercase}
+.badge-protocol{background:#3b82f633;color:#60a5fa}
+.badge-online{background:#22c55e33;color:#4ade80}
+.badge-offline{background:#ef444433;color:#f87171}
+.badge-country{background:#8b5cf633;color:#a78bfa}
+.flag{font-size:1.1rem;margin-right:4px;vertical-align:middle}
+.nic-card{text-align:center;padding:1rem}
+.nic-value{font-size:2rem;font-weight:800}
+.nic-label{font-size:0.65rem;color:#64748b;letter-spacing:0.05em}
+.traffic-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1e293b;transition:background 0.15s}
+.traffic-row:hover{background:#1e293b44}
+.traffic-row:last-child{border-bottom:none}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#0f172a}
+::-webkit-scrollbar-thumb{background:#475569;border-radius:3px}
+.geo-flag{font-size:1.4rem;line-height:1}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="border-b border-slate-700/50 px-5 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <h1 class="text-lg font-bold tracking-tight">VPN Server Monitor</h1>
+    <span class="badge" id="vpn-type-badge">--</span>
+  </div>
+  <div class="flex items-center gap-4">
+    <span id="refresh-dot" class="text-xs text-green-400">● LIVE</span>
+    <span id="clock" class="text-xs text-slate-500">--</span>
+  </div>
+</header>
+
+<main class="p-4 md:p-5 space-y-4">
+
+<!-- Row 1: CPU + Memory + Load + Disk -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+  <!-- CPU -->
+  <div class="card">
+    <div class="stat-label">CPU 使用率</div>
+    <div class="flex items-end gap-2">
+      <span class="stat-value text-blue-400" id="cpu-percent">--%</span>
+      <span class="text-xs text-slate-500 mb-1" id="cpu-temp">--</span>
+    </div>
+    <div id="cpu-cores" class="mt-2 space-y-1 max-h-[140px] overflow-y-auto"></div>
+  </div>
+
+  <!-- Memory -->
+  <div class="card">
+    <div class="stat-label">内存</div>
+    <span class="stat-value text-emerald-400" id="mem-percent">--%</span>
+    <div class="progress-bar mt-2">
+      <div class="progress-fill bg-emerald-500" id="mem-bar" style="width:0%"></div>
+    </div>
+    <div class="flex justify-between mt-1 text-xs text-slate-500">
+      <span id="mem-used">--</span><span id="mem-total">--</span>
+    </div>
+    <div class="text-xs text-slate-600 mt-1">Swap: <span id="swap-info">--</span></div>
+  </div>
+
+  <!-- Load -->
+  <div class="card">
+    <div class="stat-label">系统负载</div>
+    <div class="flex gap-3 mt-1">
+      <div><span class="text-cyan-400 font-bold text-lg" id="load1">--</span><span class="text-xs text-slate-500 ml-1">1m</span></div>
+      <div><span class="text-yellow-400 font-bold text-lg" id="load5">--</span><span class="text-xs text-slate-500 ml-1">5m</span></div>
+      <div><span class="text-red-400 font-bold text-lg" id="load15">--</span><span class="text-xs text-slate-500 ml-1">15m</span></div>
+    </div>
+    <div id="load-chart" style="width:100%;height:75px;margin-top:4px"></div>
+  </div>
+
+  <!-- Disk -->
+  <div class="card overflow-y-auto max-h-[180px]">
+    <div class="stat-label">磁盘空间</div>
+    <div id="disk-list" class="mt-2 space-y-3"></div>
+  </div>
+</section>
+
+<!-- Row 2: Network Traffic Chart -->
+<section class="card">
+  <div class="stat-label">实时网卡流量 · Mbps</div>
+  <div id="nic-chart" style="width:100%;height:270px;margin-top:6px"></div>
+</section>
+
+<!-- Row 3: VPN Service + VPN Clients -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  <!-- VPN Service Status -->
+  <div class="card">
+    <div class="stat-label">VPN 服务</div>
+    <div id="vpn-services" class="mt-2 space-y-2"></div>
+    <div class="mt-3 pt-3 border-t border-slate-700/50">
+      <span class="text-xs text-slate-500">端口实时连接</span>
+      <div id="vpn-port-stats" class="mt-2 space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- VPN Clients -->
+  <div class="card lg:col-span-2 overflow-x-auto">
+    <div class="flex items-center justify-between">
+      <span class="stat-label">活跃客户端 (<span id="client-count">0</span>)</span>
+    </div>
+    <table class="mt-2" id="client-table">
+      <thead><tr><th>IP 地址</th><th>国家/地区</th><th>城市</th><th>协议</th><th>端口</th><th>ISP</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Row 4: vnStat Traffic Summary (Redesigned - no chart, GB display) -->
+<section class="card">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <span class="stat-label">服务器流量统计 (vnStat · 所有网卡合计 · GB)</span>
+    <div class="flex gap-1" id="vnstat-tabs">
+      <button class="tab-btn active" data-mode="hourly">24小时</button>
+      <button class="tab-btn" data-mode="daily">30天</button>
+      <button class="tab-btn" data-mode="weekly">8周</button>
+      <button class="tab-btn" data-mode="monthly">12月</button>
+    </div>
+  </div>
+  <div id="vnstat-content" class="mt-3 max-h-[350px] overflow-y-auto"></div>
+  <div id="vnstat-summary" class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+</section>
+
+</main>
+
+<script>
+// ── Country flag mapping ──
+const COUNTRY_FLAGS = {
+  CN:'🇨🇳',US:'🇺🇸',JP:'🇯🇵',KR:'🇰🇷',GB:'🇬🇧',DE:'🇩🇪',FR:'🇫🇷',CA:'🇨🇦',AU:'🇦🇺',
+  SG:'🇸🇬',HK:'🇭🇰',TW:'🇹🇼',IN:'🇮🇳',BR:'🇧🇷',RU:'🇷🇺',NL:'🇳🇱',SE:'🇸🇪',CH:'🇨🇭',
+  IT:'🇮🇹',ES:'🇪🇸',VN:'🇻🇳',TH:'🇹🇭',MY:'🇲🇾',ID:'🇮🇩',PH:'🇵🇭',TR:'🇹🇷',UA:'🇺🇦',
+  PL:'🇵🇱',RO:'🇷🇴',CZ:'🇨🇿',AT:'🇦🇹',BE:'🇧🇪',NO:'🇳🇴',DK:'🇩🇰',FI:'🇫🇮',IE:'🇮🇪',
+  PT:'🇵🇹',GR:'🇬🇷',HU:'🇭🇺',NZ:'🇳🇿',ZA:'🇿🇦',AE:'🇦🇪',SA:'🇸🇦',IL:'🇮🇱',EG:'🇪🇬',
+  NG:'🇳🇬',KE:'🇰🇪',AR:'🇦🇷',CL:'🇨🇱',CO:'🇨🇴',MX:'🇲🇽',PE:'🇵🇪',PK:'🇵🇰',BD:'🇧🇩',
+  KZ:'🇰🇿',UZ:'🇺🇿',IR:'🇮🇷',IQ:'🇮🇶'
+};
+
+function getFlag(code) { return COUNTRY_FLAGS[code] || (code ? '🏳️' : '🌐'); }
+
+// ── ECharts ──
+const loadChart = echarts.init(document.getElementById('load-chart'));
+const nicChart = echarts.init(document.getElementById('nic-chart'));
+
+// ── WebSocket ──
+const WS_URL = `${location.protocol==='https:'?'wss:':'ws:'}//${location.host}/ws`;
+let ws, vnstatMode = 'hourly', vnstatCache = null;
+
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    document.getElementById('refresh-dot').textContent = '● LIVE';
+    document.getElementById('refresh-dot').style.color = '#22c55e';
+    ws.send('vnstat');
+  };
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'vnstat') { vnstatCache = msg.data; renderVnstat(); return; }
+    updateDashboard(msg);
+  };
+  ws.onclose = () => {
+    document.getElementById('refresh-dot').textContent = '● DEAD';
+    document.getElementById('refresh-dot').style.color = '#ef4444';
+    setTimeout(connectWS, 3000);
+  };
+}
+connectWS();
+
+setInterval(() => document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN'), 1000);
+setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) ws.send('vnstat'); }, 30000);
+
+window.addEventListener('resize', () => { loadChart.resize(); nicChart.resize(); });
+
+// ── Main Update ──
+function updateDashboard(s) {
+  // CPU
+  document.getElementById('cpu-percent').textContent = s.cpu.percent.toFixed(1) + '%';
+  document.getElementById('cpu-temp').textContent = s.cpu.temp ? s.cpu.temp.toFixed(0) + '°C' : '';
+  let coresHTML = '';
+  (s.cpu.per_core || []).forEach((p, i) => {
+    const c = p > 80 ? '#ef4444' : p > 60 ? '#eab308' : '#22c55e';
+    coresHTML += `<div class="flex items-center gap-2">
+      <span class="text-xs text-slate-500 w-8">C${i}</span>
+      <div class="flex-1 progress-bar"><div class="progress-fill" style="width:${p}%;background:${c}"></div></div>
+      <span class="text-xs w-10 text-right">${p.toFixed(0)}%</span></div>`;
+  });
+  document.getElementById('cpu-cores').innerHTML = coresHTML;
+
+  // Memory
+  document.getElementById('mem-percent').textContent = s.memory.percent.toFixed(1) + '%';
+  document.getElementById('mem-bar').style.width = s.memory.percent + '%';
+  document.getElementById('mem-used').textContent = `已用 ${s.memory.used_gb.toFixed(1)} GB`;
+  document.getElementById('mem-total').textContent = `总量 ${s.memory.total_gb.toFixed(1)} GB`;
+  document.getElementById('swap-info').textContent =
+    `${s.memory.swap_used_gb.toFixed(1)} / ${s.memory.swap_total_gb.toFixed(1)} GB (${s.memory.swap_percent.toFixed(1)}%)`;
+
+  // Load
+  document.getElementById('load1').textContent = s.load.load1.toFixed(2);
+  document.getElementById('load5').textContent = s.load.load5.toFixed(2);
+  document.getElementById('load15').textContent = s.load.load15.toFixed(2);
+
+  if (s.history && s.history.load) {
+    const data = s.history.load;
+    const times = data.map(p => new Date(p.time*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+    loadChart.setOption({
+      grid:{top:5,right:8,bottom:15,left:38},
+      xAxis:{type:'category',data:times,show:false},
+      yAxis:{type:'value',splitLine:{lineStyle:{color:'#334155'}},axisLabel:{fontSize:8,color:'#64748b'}},
+      series:[
+        {name:'1m',type:'line',data:data.map(p=>p.load1),smooth:true,symbol:'none',lineStyle:{width:1.5,color:'#22d3ee'},areaStyle:{color:'#22d3ee12'}},
+        {name:'5m',type:'line',data:data.map(p=>p.load5),smooth:true,symbol:'none',lineStyle:{width:1.5,color:'#eab308'},areaStyle:{color:'#eab3080e'}},
+        {name:'15m',type:'line',data:data.map(p=>p.load15),smooth:true,symbol:'none',lineStyle:{width:1.5,color:'#ef4444'},areaStyle:{color:'#ef44440e'}},
+      ],
+      legend:{show:true,bottom:0,textStyle:{color:'#64748b',fontSize:8},itemWidth:12,itemHeight:6}
+    }, true);
+  }
+
+  // Disk
+  let diskHTML = '';
+  (s.disks || []).forEach(d => {
+    const c = d.percent > 85 ? '#ef4444' : d.percent > 70 ? '#eab308' : '#22c55e';
+    const io = s.disk_io && s.disk_io[d.device];
+    diskHTML += `<div>
+      <div class="flex justify-between text-xs"><span class="text-slate-400">${d.mountpoint}</span><span style="color:${c}">${d.percent}%</span></div>
+      <div class="progress-bar mt-1"><div class="progress-fill" style="width:${d.percent}%;background:${c}"></div></div>
+      <div class="flex justify-between text-xs text-slate-600 mt-0.5"><span>${d.used_gb}/${d.total_gb} GB</span>
+        ${io ? `<span>R:${io.read_mbps.toFixed(1)} W:${io.write_mbps.toFixed(1)} MB/s</span>` : ''}
+      </div></div>`;
+  });
+  document.getElementById('disk-list').innerHTML = diskHTML;
+
+  // NIC Chart (Chinese labels, big fonts, legend below)
+  const nics = s.network || {};
+  const histNet = s.history?.network || {};
+  const NIC_COLORS = { rx: '#60a5fa', tx: '#f97316' };
+  const nicSeries = [];
+  // NIC name → Chinese
+  function nicLabel(iface) {
+    if (iface.startsWith('eth') || iface.startsWith('ens') || iface.startsWith('enp')) return '主网卡';
+    if (iface.startsWith('wg')) return 'WireGuard';
+    if (iface.startsWith('tun')) return '隧道';
+    return iface;
+  }
+  const nicOrder = Object.keys(nics).sort((a,b) => {
+    const p = ['eth','ens','enp','wg','tun','lo'];
+    const g = n => { for(let i=0;i<p.length;i++) if(n.startsWith(p[i])) return i; return 99; };
+    return g(a)-g(b);
+  }).filter(n => n !== 'lo');
+
+  if (nicOrder.length > 0) {
+    nicOrder.forEach(iface => {
+      const hist = histNet[iface] || [];
+      const cn = nicLabel(iface);
+      ['rx_mbps','tx_mbps'].forEach(dir => {
+        const arrow = dir === 'rx_mbps' ? ' ↓' : ' ↑';
+        nicSeries.push({
+          name: cn + arrow,
+          type: 'line',
+          data: hist.map(p => p[dir] || 0),
+          smooth: true,
+          symbol: 'none',
+          lineStyle: { width: 2.5, color: NIC_COLORS[dir === 'rx_mbps' ? 'rx' : 'tx'] },
+          areaStyle: { color: dir === 'rx_mbps' ? '#3b82f630' : '#f9731625' },
+        });
+      });
+    });
+
+    const times = (histNet[nicOrder[0]] || []).map(p =>
+      new Date(p.time*1000).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'})
+    );
+
+    nicChart.setOption({
+      grid: { top: 10, right: 20, bottom: 50, left: 50 },
+      xAxis: {
+        type: 'category', data: times,
+        axisLabel: { fontSize: 11, color: '#94a3b8', rotate: 0, interval: Math.max(1, Math.floor(times.length/8)) },
+        axisLine: { lineStyle: { color: '#334155' } },
+      },
+      yAxis: {
+        type: 'value', name: 'Mbps',
+        nameTextStyle: { fontSize: 12, color: '#94a3b8' },
+        splitLine: { lineStyle: { color: '#1e293b' } },
+        axisLabel: { fontSize: 11, color: '#94a3b8' },
+      },
+      series: nicSeries,
+      legend: {
+        show: true, bottom: 5,
+        textStyle: { fontSize: 13, color: '#cbd5e1' },
+        itemWidth: 24, itemHeight: 3,
+      },
+      tooltip: { trigger: 'axis', textStyle: { fontSize: 13 } },
+    }, true);
+  } else {
+    nicChart.setOption({
+      title: { text: '采集数据中...', left: 'center', top: 'center', textStyle: { color: '#64748b', fontSize: 14 } }
+    }, true);
+  }
+
+  // VPN
+  const vpn = s.vpn || {};
+  document.getElementById('vpn-type-badge').textContent = vpn.type || '--';
+  document.getElementById('vpn-type-badge').className = 'badge ' +
+    (vpn.type==='singbox'?'badge-protocol':vpn.type==='wireguard'?'badge-online':'badge-country');
+
+  // VPN Service Status (with uptime)
+  let svcHTML = '';
+  (vpn.services || []).forEach(svc => {
+    const dot = svc.status === 'active' ? 'status-running' : 'status-stopped';
+    const label = svc.status === 'active' ? 'badge-online' : 'badge-offline';
+    let uptimeStr = '';
+    if (svc.uptime_seconds && svc.uptime_seconds > 0) {
+      const d = Math.floor(svc.uptime_seconds / 86400);
+      const h = Math.floor((svc.uptime_seconds % 86400) / 3600);
+      const m = Math.floor((svc.uptime_seconds % 3600) / 60);
+      uptimeStr = d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+    svcHTML += `<div class="flex items-center justify-between py-1">
+      <div><span class="status-dot ${dot}"></span><span class="text-sm">${svc.name}</span></div>
+      <div class="flex items-center gap-2">
+        ${uptimeStr ? `<span class="text-xs text-slate-600">运行 ${uptimeStr}</span>` : ''}
+        <span class="badge ${label}">${svc.status}</span>
+      </div></div>`;
+  });
+  if (!svcHTML) svcHTML = '<div class="text-xs text-slate-500 py-2">未检测到 VPN 服务</div>';
+  document.getElementById('vpn-services').innerHTML = svcHTML;
+
+  // Port connection stats + realtime speed
+  let portHTML = '';
+  const portStats = vpn.port_stats || [];
+  if (portStats.length > 0) {
+    portStats.forEach(p => {
+      const connCount = p.connections || 0;
+      const connBadge = connCount > 0 ? 'badge-online' : 'badge-offline';
+      const speed = (p.speed_mbps || 0).toFixed(2);
+      const speedColor = speed > 1 ? '#4ade80' : speed > 0.1 ? '#fbbf24' : '#64748b';
+      portHTML += `<div class="flex items-center justify-between text-xs py-1.5 border-b border-slate-800 last:border-0">
+        <div class="flex items-center gap-2 w-28">
+          <span class="text-slate-300 font-medium">${p.type.toUpperCase()}</span>
+          <span class="text-slate-600">:${p.port}</span>
+        </div>
+        <span class="w-16 text-right" style="color:${speedColor}">${speed} Mbps</span>
+        <span class="badge ${connBadge}" style="min-width:56px;text-align:center">
+          ${connCount > 0 ? connCount : '空闲'}
+        </span>
+      </div>`;
+    });
+  }
+  if (!portHTML) portHTML = '<div class="text-xs text-slate-600 py-2">--</div>';
+  document.getElementById('vpn-port-stats').innerHTML = portHTML;
+
+  // VPN Clients (with geo)
+  const clients = vpn.clients || [];
+  document.getElementById('client-count').textContent = clients.length;
+  let clientRows = '';
+  if (clients.length === 0) {
+    clientRows = `<tr><td colspan="6" class="text-xs text-slate-500 text-center py-6">暂无活跃客户端连接</td></tr>`;
+  } else {
+    clients.forEach(c => {
+      const flag = getFlag(c.countryCode);
+      const protoBadge = c.protocol === 'wireguard' ? 'badge-online' :
+                         c.protocol === 'openvpn' ? 'badge-country' : 'badge-protocol';
+      clientRows += `<tr>
+        <td><code class="text-cyan-400 text-xs">${c.ip||c.endpoint||'--'}</code></td>
+        <td><span class="geo-flag">${flag}</span> <span class="text-xs">${c.country||'--'}</span></td>
+        <td class="text-xs text-slate-400">${c.city||'--'}</td>
+        <td><span class="badge ${protoBadge}">${c.protocol||'--'}</span></td>
+        <td class="text-xs text-slate-400">${c.port||'--'}</td>
+        <td class="text-xs text-slate-500">${c.isp||c.org||'--'}</td>
+      </tr>`;
+    });
+  }
+  document.getElementById('client-table').querySelector('tbody').innerHTML = clientRows;
+}
+
+// ── vnStat Rendering (No chart, data display with GB) ──
+function renderVnstat() {
+  const data = vnstatCache;
+  if (!data || data.error) {
+    document.getElementById('vnstat-content').innerHTML =
+      `<div class="text-xs text-slate-500 text-center py-8">${data?.error||'加载中...'}</div>`;
+    document.getElementById('vnstat-summary').innerHTML = '';
+    return;
+  }
+
+  const mode = vnstatMode;
+  const entries = data[mode] || [];
+
+  // Summary cards
+  if (entries.length > 0) {
+    const totalRx = entries.reduce((s,e) => s + e.rx_gb, 0);
+    const totalTx = entries.reduce((s,e) => s + e.tx_gb, 0);
+    const totalAll = totalRx + totalTx;
+    const avgDaily = mode === 'monthly' ? totalAll / 30 : mode === 'weekly' ? totalAll / 7 : totalAll / Math.max(1, entries.length);
+
+    document.getElementById('vnstat-summary').innerHTML = `
+      <div class="nic-card rounded-lg" style="border:1px solid #334155">
+        <div class="nic-label">总下载 ↓</div>
+        <div class="nic-value text-blue-400" style="font-size:1.4rem">${totalRx.toFixed(2)}</div>
+        <div class="nic-label">GB</div>
+      </div>
+      <div class="nic-card rounded-lg" style="border:1px solid #334155">
+        <div class="nic-label">总上传 ↑</div>
+        <div class="nic-value text-orange-400" style="font-size:1.4rem">${totalTx.toFixed(2)}</div>
+        <div class="nic-label">GB</div>
+      </div>
+      <div class="nic-card rounded-lg" style="border:1px solid #334155">
+        <div class="nic-label">合计流量</div>
+        <div class="nic-value text-emerald-400" style="font-size:1.4rem">${totalAll.toFixed(2)}</div>
+        <div class="nic-label">GB</div>
+      </div>
+      <div class="nic-card rounded-lg" style="border:1px solid #334155">
+        <div class="nic-label">日均流量</div>
+        <div class="nic-value text-purple-400" style="font-size:1.4rem">${avgDaily.toFixed(2)}</div>
+        <div class="nic-label">GB/天</div>
+      </div>`;
+  } else {
+    document.getElementById('vnstat-summary').innerHTML =
+      '<div class="col-span-full text-xs text-slate-500 text-center py-4">暂无该维度数据（vnStat 正在采集...）</div>';
+  }
+
+  // Detail rows
+  const recent = entries.slice(-24).reverse();
+  let rowsHTML = '';
+  if (recent.length === 0) {
+    rowsHTML = '<div class="text-xs text-slate-500 text-center py-6">暂无数据</div>';
+  } else {
+    rowsHTML = `<div class="grid grid-cols-1 gap-0">`;
+    recent.forEach(e => {
+      const barWidth = Math.min(100, (e.total_gb / Math.max(0.01, recent[0]?.total_gb || 1)) * 100);
+      rowsHTML += `<div class="traffic-row">
+        <span class="text-xs text-slate-400 w-20 md:w-32 shrink-0">${e.time}</span>
+        <div class="flex-1 mx-3">
+          <div class="progress-bar" style="height:12px">
+            <div class="progress-fill" style="width:${barWidth}%;background:linear-gradient(90deg,#3b82f6,#8b5cf6)"></div>
+          </div>
+        </div>
+        <div class="flex gap-3 text-xs shrink-0">
+          <span class="text-blue-400 w-14 text-right">↓ ${e.rx_gb.toFixed(3)}</span>
+          <span class="text-orange-400 w-14 text-right">↑ ${e.tx_gb.toFixed(3)}</span>
+          <span class="text-slate-300 w-14 text-right font-semibold">${e.total_gb.toFixed(3)} GB</span>
+        </div>
+      </div>`;
+    });
+    rowsHTML += '</div>';
+  }
+  document.getElementById('vnstat-content').innerHTML = rowsHTML;
+}
+
+// ── vnStat Tab Switching ──
+document.getElementById('vnstat-tabs').addEventListener('click', e => {
+  if (!e.target.classList.contains('tab-btn')) return;
+  document.querySelectorAll('#vnstat-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  vnstatMode = e.target.dataset.mode;
+  renderVnstat();
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send('vnstat');
+});
+</script>
+</body>
+</html>
