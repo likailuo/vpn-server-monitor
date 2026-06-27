@@ -52,7 +52,7 @@ yum install -y python3 python3-pip vnstat iptables
 
 ```bash
 # 1. 克隆仓库到服务器
-git clone https://github.com/你的用户名/vpn-server-monitor.git
+git clone https://github.com/likailuo/vpn-server-monitor.git
 cd vpn-server-monitor
 
 # 2. 执行部署脚本
