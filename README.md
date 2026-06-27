@@ -2,6 +2,8 @@
 
 轻量级 VPN 服务器实时监控面板，支持 **sing-box / WireGuard / OpenVPN**。
 
+> 本项目是 [sing-box-yg](https://github.com/yonggekkk/sing-box-yg) 的配套监控面板，完美适配其 sing-box 多协议代理服务端，自动解析配置文件、追踪各端口速率与客户端连接。
+
 ---
 
 ## 功能总览
