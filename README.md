@@ -53,19 +53,29 @@ yum install -y python3 python3-pip vnstat iptables
 SSH 登录服务器后，**一行命令**即可完成部署：
 
 ```bash
-sudo bash <(curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh)
+curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh | sudo bash
 ```
+
+> 如果你的服务器不支持 `bash <(curl ...)` 进程替换（报错 `/dev/fd/63: No such file`），
+> 使用上方管道方式或下面的 wget 方式。
 
 ### 指定端口
 
 ```bash
-sudo bash <(curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh) 9090
+curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh | sudo bash -s -- 9090
 ```
 
 ### 更新已有安装
 
 ```bash
-sudo bash <(curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh) --update
+curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh | sudo bash -s -- --update
+```
+
+### wget 两步走（最稳）
+
+```bash
+wget -O deploy.sh https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh
+sudo bash deploy.sh
 ```
 
 ### 传统方式（手动克隆）
