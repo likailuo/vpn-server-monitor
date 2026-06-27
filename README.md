@@ -48,19 +48,33 @@ yum install -y python3 python3-pip vnstat iptables
 
 ---
 
-## 一键部署
+## 🚀 一键部署
+
+SSH 登录服务器后，**一行命令**即可完成部署：
 
 ```bash
-# 1. 克隆仓库到服务器
+sudo bash <(curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh)
+```
+
+### 指定端口
+
+```bash
+sudo bash <(curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh) 9090
+```
+
+### 更新已有安装
+
+```bash
+sudo bash <(curl -sL https://raw.githubusercontent.com/likailuo/vpn-server-monitor/main/remote-deploy.sh) --update
+```
+
+### 传统方式（手动克隆）
+
+```bash
 git clone https://github.com/likailuo/vpn-server-monitor.git
 cd vpn-server-monitor
-
-# 2. 执行部署脚本
 chmod +x deploy.sh
 sudo ./deploy.sh
-
-# 指定端口（默认 8088）
-sudo ./deploy.sh 9090
 ```
 
 部署完成后访问 `http://你的服务器IP:8088`
@@ -83,10 +97,12 @@ sudo ./deploy.sh 9090
 
 ```
 vpn-server-monitor/
-├── deploy.sh          # 一键部署脚本
+├── remote-deploy.sh   # SSH 远程一键部署（推荐）
+├── deploy.sh          # 本地部署脚本
 ├── server.py          # FastAPI 后端
 ├── requirements.txt   # Python 依赖
 ├── .env.example       # 环境变量模板
+├── .gitignore         # 防止敏感文件泄露
 ├── static/
 │   └── index.html     # 监控仪表盘
 ├── LICENSE            # MIT 开源协议
