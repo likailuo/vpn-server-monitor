@@ -6,6 +6,21 @@
 
 ---
 
+## 关于 sing-box-yg
+
+[sing-box-yg](https://github.com/yonggekkk/sing-box-yg) 是由 [yonggekkk](https://github.com/yonggekkk) 开发的一站式 sing-box 多协议代理服务端部署方案，具有以下特点：
+
+- 一键安装 sing-box 服务端，支持 VMess / VLESS / Hysteria2 / TUIC / ShadowTLS 等主流协议
+- 自动管理节点配置（Argo隧道、CDN、订阅链接生成）
+- 内置客户端配置输出，方便多设备接入
+- 适合在 VPS 上快速搭建代理服务
+
+**本监控面板** 专为该方案设计，能自动读取 `/etc/s-box/sb.json` 配置文件，无需额外配置即可展示每个协议端口的实时流量和客户端信息。
+
+---
+
+---
+
 ## 功能总览
 
 | 模块 | 内容 |
